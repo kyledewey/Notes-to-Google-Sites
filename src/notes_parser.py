@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # This is intended to convert my typical notes to HTML
 # My notes often look like this:
 #
@@ -19,6 +21,7 @@ from abc import ABCMeta, abstractmethod
 from cgi import escape
 import string
 import sys
+import re
 
 class ParseResult( object ):
     def __init__( self, parsed, remaining ):
@@ -28,6 +31,11 @@ class ParseResult( object ):
     def __eq__( self, other ):
         return self.parsed == other.parsed and \
             self.remaining == other.remaining
+
+# given two strings, it will concatenate them so there is exactly
+# one space in between them
+def concatWithSpace( str1, str2 ):
+    return str1.rstrip() + " " + str2.lstrip()
 
 # gets the number of whitespace characters before the line begins
 def numLeadingWhitespace( line ):
@@ -82,14 +90,15 @@ class AndParser( Parser ):
                             p2Res.remaining )
 
 class HeaderParser( Parser ):
+    REGEX_STRING = "^[^\-.]+"
+    REGEX = re.compile( REGEX_STRING )
+
     def __init__( self ):
         super( HeaderParser, self ).__init__()
 
     # headers start at the beginning of a line, and are mostly uppercase
     def isHeader( self, line ):
-        return len( line ) > 0 and \
-            line[ 0 ] != "-" and \
-            numLeadingWhitespace( line ) == 0 and \
+        return self.REGEX.match( line ) and \
             moreCaps( line )
 
     def formatHeader( self, line ):
@@ -106,50 +115,94 @@ class HeaderParser( Parser ):
             return ParseResult( "", lines )
 
 class ListHeaderParser( Parser ):
+    REGEX_STRING = "^(\s*)-"
+    REGEX = re.compile( REGEX_STRING )
     def __init__( self ):
         super( ListHeaderParser, self ).__init__()
 
     def parse( self, lines ):
         if len( lines ) == 0:
             return ParseResult( "", [] )
-
-        parsed = ""
-        remaining = lines
-        line = lines[ 0 ]
-        stripped = line.lstrip()
-        if len( stripped ) >= 1 and stripped[ 0 ] == "-":
-            parsed = "<ul>\n"
-            inner = ListParser( len( line ) - len( stripped ) ).parse( lines )
-            parsed += inner.parsed + "</ul>\n"
-            remaining = inner.remaining
-
-        return ParseResult( parsed, remaining )
+        else:
+            parsed = ""
+            remaining = lines
+            match = self.REGEX.match( lines[ 0 ] )
+            if match:
+                leadingSize = len( match.groups()[ 0 ] )
+                parsed = "<ul>\n"
+                inner = ListParser( leadingSize ).parse( lines )
+                parsed += inner.parsed + "</ul>\n"
+                remaining = inner.remaining
+            return ParseResult( parsed, remaining )
 
 class ListElementParser( Parser ):
     # numIn is the number of whitespace we are in
     def __init__( self, numIn = 0 ):
         super( ListElementParser, self ).__init__()
         self.numIn = numIn
+        self.regexStringFirstLine = '^\s{%s}-(.*)' % (numIn)
+        self.regexFirstLine = re.compile( self.regexStringFirstLine )
+        self.regexStringNextLinesWhitespace = '^\s{%s,}' % (numIn)
+        self.regexNextLinesWhitespace = \
+            re.compile( self.regexStringNextLinesWhitespace )
+        self.regexStringNextLinesContent = '^([^-].+)'
+        self.regexNextLinesContent = \
+            re.compile( self.regexStringNextLinesContent )
 
+    def firstLineText( self, line ):
+        return self.regexFirstLine.match( line ).groups()[ 0 ]
+
+    # returns the text of the next lines, or None if it's not a valid
+    # portion of a list element
+    def restLinesText( self, line ):
+        # note that python lacks an atomic grouping operator or a possessive
+        # quantifier, so a regex like:
+        # ^\s{%s,}([^-].+) is insufficient in and of itself.  it will backtrack
+        # itself into accepting.
+        if self.regexNextLinesWhitespace.match( line ):
+            match = self.regexNextLinesContent.match( line.lstrip() )
+            if match:
+                return match.groups()[ 0 ]
+        return None
+        
     # assumes that it will be initially called on a list element
     def parse( self, lines ):
-        parsed = lines[ 0 ].lstrip()[ 1: ] + " "
+        parsed = self.firstLineText( lines[ 0 ] )
         lines = lines[ 1: ]
-        strippedLine = [ parsed ]
+        done = False
 
-        # python doesn't allow assignment in an expression...
-        def stripAndLen( line ):
-            strippedLine[ 0 ] = line.lstrip()
-            return len( strippedLine[ 0 ] )
+        while len( lines ) > 0 and not done:
+            curLine = self.restLinesText( lines[ 0 ] )
+            if curLine:
+                parsed = concatWithSpace( parsed, curLine )
+                lines = lines[ 1: ]
+            else:
+                done = True
 
-        while( len( lines ) > 0 and \
-                   numLeadingWhitespace( lines[ 0 ] ) >= self.numIn and \
-                   stripAndLen( lines[ 0 ] ) >= 1 and \
-                   strippedLine[ 0 ][ 0 ] != "-" ):
-            parsed += strippedLine[ 0 ] + " "
-            lines = lines[ 1: ]
+        return ParseResult( parsed, lines )
 
-        return ParseResult( parsed[ :-1 ], lines )
+class ListGroupParser( Parser ):
+    # numIn is the number of whitespace we are in
+    # assumes that the list tag has already been started
+    def __init__( self, numIn = 0 ):
+        super( ListGroupParser, self ).__init__()
+        self.numIn = numIn
+        self.regexString = '(^\s{%s})-.*' % (numIn)
+        self.regex = re.compile( self.regexString )
+
+    def parse( self, lines ):
+        parsed = ""
+        done = False
+        while lines and not done:
+            match = self.regex.match( lines[ 0 ] )
+            if match:
+                element = ListElementParser( self.numIn ).parse( lines )
+                parsed += "<li>%s</li>\n" % element.parsed
+                lines = element.remaining
+            else:
+                done = True
+
+        return ParseResult( parsed, lines )
 
 class ListParser( Parser ):
     # numIn is the number of whitespace we are in
@@ -157,67 +210,49 @@ class ListParser( Parser ):
     def __init__( self, numIn = 0 ):
         super( ListParser, self ).__init__()
         self.numIn = numIn
-
-    # attempts to parse in a group of lines at the same indent level
-    # this may need to be repeatedly called, as with:
-    # -outer
-    #   -inner
-    # -outer
-    # returns a ParseResult for the first outer line
-    def parseGroup( self, lines ):
-        parsed = ""
-        leading = [None]
-        
-        def setAndGetLeading( line ):
-            leading[ 0 ] = numLeadingWhitespace( line )
-            return leading[ 0 ]
-
-        while len( lines ) > 0 and \
-                setAndGetLeading( lines[ 0 ] ) == self.numIn and \
-                len( lines[ 0 ] ) > leading[ 0 ] and \
-                lines[ 0 ][ leading[ 0 ] ] == "-":
-            element = ListElementParser( self.numIn ).parse( lines )
-            parsed += "<li>%s</li>\n" % element.parsed
-            lines = element.remaining
-            
-        return ParseResult( parsed, lines )
+        self.regexString = '(^\s*)-.*'
+        self.regex = re.compile( self.regexString )
 
     def parse( self, lines ):
         parsed = ""
-        stripped = [ None ]
-
-        def setAndGetLen( line ):
-            stripped[ 0 ] = line.lstrip()
-            return len( stripped[ 0 ] )
-
-        while len( lines ) > 0 and \
-                setAndGetLen( lines[ 0 ] ) >= 1 and \
-                stripped[ 0 ][ 0 ] == "-":
-            res = None
-            leading = numLeadingWhitespace( lines[ 0 ] )
-            if leading == self.numIn:
-                res = self.parseGroup( lines )
-            elif leading > self.numIn:
-                res = ListHeaderParser().parse( lines )
-            else: # leading < self.numIn
-                break
-            
-            parsed += res.parsed
-            lines = res.remaining
+        done = False
+        while lines and not done:
+            match = self.regex.match( lines[ 0 ] )
+            if match:
+                res = None
+                numWhitespace = len( match.groups()[ 0 ] )
+                if numWhitespace == self.numIn:
+                    res = ListGroupParser( self.numIn ).parse( lines )
+                elif numWhitespace > self.numIn:
+                    res = ListHeaderParser().parse( lines )
+                else: # leading < self.numIn
+                    done = True
+                
+                if res: # if we have something to add
+                    parsed += res.parsed
+                    lines = res.remaining
+            else:
+                done = True # if we didn't match
 
         return ParseResult( parsed, lines )
-
+                    
 class BreakParser( Parser ):
+    REGEX_STRING = "^\s*$"
+    REGEX = re.compile( REGEX_STRING )
+
     def __init__( self ):
         super( BreakParser, self ).__init__()
 
     def parse( self, lines ):
-        if len( lines ) > 0 and len( lines[ 0 ] ) == numLeadingWhitespace( lines[ 0 ] ):
+        if lines and self.REGEX.match( lines[ 0 ] ):
             return ParseResult( "<br/>\n", lines[ 1: ] )
         else:
             return ParseResult( "", lines )
 
 class NotesParser( Parser ):
+    COMPOSITE_PARSER = andParsers( HeaderParser(),
+                                   ListHeaderParser(),
+                                   BreakParser() )
     def __init__( self ):
         super( NotesParser, self ).__init__()
 
@@ -226,9 +261,7 @@ class NotesParser( Parser ):
         openFreeText = False
 
         while len( lines ) > 0:
-            res = andParsers( HeaderParser(),
-                              ListHeaderParser(),
-                              BreakParser() ).parse( lines )
+            res = self.COMPOSITE_PARSER.parse( lines )
             if res.parsed == "": # we got nowhere - free text
                 assert( res.remaining == lines )
                 if openFreeText: # already in open text
@@ -245,6 +278,7 @@ class NotesParser( Parser ):
                 parsed += res.parsed
                 lines = res.remaining
 
+        # if we ended with free text, then we still need to close it
         if openFreeText:
             parsed += "</p>\n"
             openFreeText = False

@@ -1,7 +1,16 @@
 (defvar notes-mode-hook nil)
+(defvar notes-mode-map () "")
+
+(defun notes-mode-commands (map)
+  (define-key map "\177" 'backward-delete-char-untabify))
+
+(if notes-mode-map
+    ()
+  (setq notes-mode-map (make-sparse-keymap))
+  (notes-mode-commands notes-mode-map))
 
 (add-to-list 'auto-mode-alist
-	     '("\\.notes\\'" . notes-mode))
+             '("\\.notes\\'" . notes-mode))
 
 (require 'comint)
 (defun sync-notes ()
@@ -17,10 +26,14 @@
   (switch-to-buffer-other-window "*notes-upload*"))
     
     
-(defun notes-mode ()
-  "Major mode for writing notes."
+(define-derived-mode notes-mode fundamental-mode "Notes"
+  "Major mode for writing nodes"
   (setq major-mode 'notes-mode)
   (setq mode-name "Notes")
+  (setq indent-tabs-mode nil)
+  (setq tab-width 4)
+  (setq indent-line-function 'insert-tab)
+  (use-local-map notes-mode-map)
   (run-hooks 'notes-mode-hook))
 
 (provide 'notes-mode)

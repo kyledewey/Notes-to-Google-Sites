@@ -57,7 +57,7 @@ class TestParsers( unittest.TestCase ):
                           "some really1 really2 really3 really4 really5 really6 long text" )
                                                          
     def test_listp_group( self ):
-        self.assertEqual( ListParser().parseGroup( toLines( \
+        self.assertEqual( ListGroupParser().parse( toLines( \
                     "-outer1\n-outer2" ) ).parsed,
                           "<li>outer1</li>\n<li>outer2</li>\n" )
 
@@ -94,6 +94,13 @@ class TestParsers( unittest.TestCase ):
                               "</ul>\n" + \
                               "<br/>\n" )
 
+    def testParserEmpty( self ):
+        self.assertEqual( toLines( "" ), [""] )
+
+    def test_empty( self ):
+        self.assertEqual( NotesParser().parse( toLines( "" ) ).parsed, 
+                          "<br/>\n" )
+                          
     def test_combo( self ):
         self.assertEqual( NotesParser().parse( toLines( \
                     "HEADER:\n\n-outer1\n -inner1\n -inner2\n-outer2\n\nsome free text\n" ) ).parsed,
