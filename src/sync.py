@@ -21,6 +21,7 @@ class SitesCommunicator( object ):
         self.MEETING_MINUTES = config[ 'MEETING_MINUTES' ]
         self.client = gdata.sites.client.SitesClient( source = self.APPLICATION_NAME,
                                                       site = self.SITE )
+        self.client.ssl = True
         self.authClient()
 
     def writeToken( self, token ):
@@ -33,10 +34,10 @@ class SitesCommunicator( object ):
     def handleCaptchaChallenge( self, challenge ):
         print 'Please visit ' + challenge.captcha_url
         answer = raw_input( 'Answer to the challenge? ' )
-        token = client.ClientLogin( self.EMAIL, self.PASSWORD, 
-                                    self.APPLICATION_NAME,
-                                    captcha_token = challenge.captcha_token,
-                                    captcha_response = answer )
+        token = self.client.ClientLogin( self.EMAIL, self.PASSWORD, 
+                                         self.APPLICATION_NAME,
+                                         captcha_token = challenge.captcha_token,
+                                         captcha_response = answer )
         self.writeToken( token )
         self.feed = self.client.GetSiteFeed()
 
@@ -44,7 +45,7 @@ class SitesCommunicator( object ):
     # returns true if authentication was ok
     def authClientWithToken( self ):
         try:
-            fh = open( TOKEN_FILE, "r" )
+            fh = open( self.TOKEN_FILE, "r" )
             token = fh.read()
             fh.close()
             self.client.auth_token = gdata.gauth.ClientLoginToken( token )
@@ -58,10 +59,9 @@ class SitesCommunicator( object ):
     def authClient( self ):
         if not self.authClientWithToken():
             try:
-                token = self.client.ClientLogin( self.EMAIL, self.PASSWORD,
-                                                 self.APPLICATION_NAME,
-                                                 service = 'jotspot' )
-                self.writeToken( token )
+                self.client.ClientLogin( self.EMAIL, self.PASSWORD,
+                                         self.APPLICATION_NAME )
+                self.writeToken( self.client.auth_token )
                 self.feed = self.client.GetSiteFeed()
             except gdata.client.CaptchaChallenge as challenge:
                 self.handleCaptchaChallenge( challenge )
