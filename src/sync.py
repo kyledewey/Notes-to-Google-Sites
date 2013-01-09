@@ -151,10 +151,7 @@ def readRawFile( filename ):
 
 def isHTMLFile( filename ):
     lower = filename.lower()
-    if lower.endswith( ".htm" ) or lower.endswith( ".html" ):
-        return True
-    else:
-        return False
+    return lower.endswith( ".htm" ) or lower.endswith( ".html" )
 
 # reads in the given file, making sure it's in HTML format
 # assumes that html files end in .html
