@@ -8,6 +8,14 @@ import sys
 import notes_parser
 import config_reader
 import os.path
+import markdown
+
+# maps file extensions to functions that can parse content of that type
+file_extension_parsers = \
+    { ".htm": lambda id: "\n".join( id ),
+      ".html": lambda id: "\n".join( id ),
+      ".notes": lambda n: notes_parser.Notes2HTML().convertContents( n ),
+      ".md": lambda m: markdown.markdown( "\n".join( m ) ) }
 
 class SitesCommunicator( object ):
     def __init__( self ):
@@ -149,18 +157,19 @@ def readRawFile( filename ):
     fh.close()
     return content
 
-def isHTMLFile( filename ):
-    lower = filename.lower()
-    return lower.endswith( ".htm" ) or lower.endswith( ".html" )
+def fileExtension( filename ):
+    name, extension = os.path.splitext( filename )
+    return extension
 
 # reads in the given file, making sure it's in HTML format
 # assumes that html files end in .html
 def readFormatted( filename ):
-    contents = readRawFile( filename )
-    if not isHTMLFile( filename ):
-        contents = notes_parser.Notes2HTML().convertContents( contents.split( "\n" ) )
-
-    return contents
+    extension = fileExtension( filename )
+    if extension in file_extension_parsers:
+        contents = readRawFile( filename ).split( "\n" )
+        return file_extension_parsers[ extension ]( contents )
+    else:
+        raise Exception( "Unknown file extension: {0}".format( extension ) )
 
 # BEGIN MAIN
 if __name__ == "__main__":
