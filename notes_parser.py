@@ -16,7 +16,7 @@
 # the design of this is based on parser combinators
 # each parser only understands how to parse one specific element
 # each parser parses as much as it can at a time, in a greedy manner
-#
+
 from abc import ABCMeta, abstractmethod
 from cgi import escape
 import string
@@ -32,27 +32,30 @@ class ParseResult(object):
         return (self.parsed == other.parsed and 
                 self.remaining == other.remaining)
 
-# given two strings, it will concatenate them so there is exactly
-# one space in between them
 def concat_with_space(str1, str2):
+    """Given two strings, it will concatenate 
+    them so there is exactly one space in between them"""
+
     return "{0} {1}".format(str1.rstrip(),
                             str2.lstrip())
 
-# gets the number of whitespace characters before the line begins
 def num_leading_whitespace(line):
+    """Gets the number of whitespace characters before 
+    the line begins"""
+
     return len(line) - len(line.lstrip())
 
-# determines if a line contains more uppercase letters
-# than lowercase letters
 def more_caps(line):
+    """Determines if a line contains more uppercase letters
+    than lowercase letters"""
     uppers = [c for c in line if c.isupper()]
     lowers = [c for c in line if c.islower()]
     return len(uppers) > len(lowers)
 
-# chomps the given string off of the end of the given string, if
-# the string is long enough and the character is there
-# otherwise is doesn't touch the string
 def chomp_string(string, postfix):
+    """Chomps the given string off of the end of the given string, if
+    the string is long enough and the character is there
+    otherwise is doesn't touch the string"""
     if string.endswith(postfix):
         up_to_postfix = len(string) - len(postfix)
         string = string[:up_to_postfix]
@@ -61,9 +64,9 @@ def chomp_string(string, postfix):
 class Parser(object):
     __metaclass__ = ABCMeta
 
-    # returns a ParseResult
     @abstractmethod
     def parse(self, lines):
+        """Returns a ParseResult"""
         pass
 
 def and_parsers(*parsers):
@@ -98,8 +101,10 @@ class HeaderParser(Parser):
     def __init__(self):
         super(HeaderParser, self).__init__()
 
-    # headers start at the beginning of a line, and are mostly uppercase
     def is_header(self, line):
+        """Headers start at the beginning of a line,
+        and are mostly uppercase"""
+
         return (self.REGEX.match(line) and 
                 more_caps(line))
 
@@ -147,8 +152,9 @@ class ListElementParser(Parser):
     REGEX_NEXT_LINES_CONTENT = \
         re.compile(REGEX_STRING_NEXT_LINES_CONTENT)
 
-    # numIn is the number of whitespace we are in
     def __init__(self, num_in=0):
+        """num_in is the number of whitespace we are in"""
+
         super(ListElementParser, self).__init__()
         self.num_in = num_in
         regex_string_first_line = '^\s{{{0}}}-(.*)'.format(num_in)
@@ -160,12 +166,12 @@ class ListElementParser(Parser):
     def first_line_text(self, line):
         return self.regex_first_line.match(line).groups()[0]
 
-    # returns the text of the next lines, or None if it's not a valid
-    # portion of a list element
     def rest_lines_text(self, line):
+        """Returns the text of the next lines, or None if it's not a valid
+        portion of a list element"""
         # note that python lacks an atomic grouping operator or a possessive
         # quantifier, so a regex like:
-        # ^\s{%s,}([^-].+) is insufficient in and of itself.  it will backtrack
+        # ^\s{%s,}([^-].+) is insufficient in and of itself. It will backtrack
         # itself into accepting.
         if self.regex_next_lines_whitespace.match(line):
             match = self.REGEX_NEXT_LINES_CONTENT.match(line.lstrip())
@@ -173,8 +179,9 @@ class ListElementParser(Parser):
                 return match.groups()[0]
         return None
         
-    # assumes that it will be initially called on a list element
     def parse(self, lines):
+        """Assumes that it will be initially called on a list element"""
+
         parsed = self.first_line_text(lines[0])
         lines = lines[1:]
         done = False
@@ -191,9 +198,9 @@ class ListElementParser(Parser):
 
 
 class ListGroupParser(Parser):
-    # numIn is the number of whitespace we are in
-    # assumes that the list tag has already been started
     def __init__(self, num_in=0):
+        """num_in is the number of whitespace we are in
+        assumes that the list tag has already been started"""
         super(ListGroupParser, self).__init__()
         self.num_in = num_in
         regex_string = '(^\s{{{0}}})-.*'.format(num_in)
@@ -217,9 +224,9 @@ class ListParser(Parser):
     REGEX_STRING = '(^\s*)-.*'
     REGEX = re.compile(REGEX_STRING)
 
-    # numIn is the number of whitespace we are in
-    # assumes that the list tag has already been started
     def __init__(self, num_in=0):
+        """num_in is the number of whitespace we are in
+        assumes that the list tag has already been started"""
         super(ListParser, self).__init__()
         self.num_in = num_in
 

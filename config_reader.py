@@ -2,10 +2,10 @@ import re
 import os.path
 import getpass
 
-# merges the two dictionaries
-# if a key is found that exists in both, then the merger
-# function is called with the key from d1 and d2
 def merge_dicts(merger, d1, d2):
+    """Merges the two dictionaries
+    if a key is found that exists in both, then the merger
+    function is called with the key from d1 and d2"""
     retval = {}
     for key, value in d1.iteritems():
         if key in d2:
@@ -19,11 +19,13 @@ def merge_dicts(merger, d1, d2):
 
     return retval
 
-# reads configuation files of the following form:
-# var1: val1
-# whitespace between the values is ignored. If the whitespace is significant,
-# enclose the value in quotes
+
 class ConfigReader(object):
+    """Reads configuation files of the following form:
+    var1: val1
+    whitespace between the values is ignored. If the whitespace is significant,
+    enclose the value in quotes"""
+
     VALUE_REGEX_STRING = '\s*"?([^"\s]+)"?\s*'
     VALUE_REGEX = re.compile(VALUE_REGEX_STRING)
     VARIABLE_REGEX_STRING = VALUE_REGEX_STRING
@@ -43,26 +45,29 @@ class ConfigReader(object):
         self.fill_in_missing_fields()
         self.add_optional_values()
 
-    # merges in the optional values. Any user-defined values take
-    # precedence
     def add_optional_values(self):
+        """Merges in the optional values. 
+        Any user-defined values take precedence"""
+
         self.config = merge_dicts(lambda x, y: x,
                                   self.config,
                                   self.optional_values())
 
-    # gets fields that shouldn't be echoed in case the user inputs them
-    # by default, this is empty
     def sensitive_fields(self):
+        """Gets fields that shouldn't be echoed in 
+        case the user inputs them by default, this is empty"""
+
         return frozenset()
 
-    # gets the required fields.  By default, it returns an
-    # empty set
     def required_fields(self):
+        """Gets the required fields.  By default, it returns an
+        empty set"""
+
         return frozenset()
 
-    # gets optional fields, along with thir default
-    # values.
     def optional_values(self):
+        """Gets optional fields, along with thir default
+        values."""
         return dict()
 
     def parse_file_line(self, line):
@@ -81,24 +86,27 @@ class ConfigReader(object):
         else:
             self.config[variable] = match.groups()[0]
 
-    # given a function that takes user input, it returns an instrumented
-    # version that prompts the user for input before asking for input
     def instrument_with_prompt(self, func):
+        """Given a function that takes user input, 
+        it returns an instrumented version that prompts 
+        the user for input before asking for input"""
+
         def instrumented(p):
             print p
             return func()
         return instrumented
 
-    # returns a function that can read in the given variable
-    # the function prints a prompt and gets input from the user
     def reader(self, variable):
+        """Returns a function that can read in the given variable
+        the function prints a prompt and gets input from the user"""
+
         if variable in self.sensitive_fields():
             return self.instrument_with_prompt(getpass.getpass)
         else:
             return raw_input
 
-    # prompts the user for the value of a given variable
     def get_user_input(self, variable):
+        """Prompts the user for the value of a given variable"""
         done = False
         while not done:
             prompt = "Enter value for \"" + variable + "\": "

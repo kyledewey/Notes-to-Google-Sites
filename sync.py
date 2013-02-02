@@ -46,9 +46,9 @@ class SitesCommunicator(object):
         fh.write(token.token_string)
         fh.close()
 
-    # to be called when a captcha is encountered
-    # handles token-related things
     def handle_captcha_challenge(self, challenge):
+        """To be called when a captcha is encountered
+        handles token-related things"""
         print 'Please visit ' + challenge.captcha_url
         answer = raw_input('Answer to the challenge? ')
         token = self.client.ClientLogin(
@@ -59,9 +59,9 @@ class SitesCommunicator(object):
         self.write_token(token)
         self.feed = self.client.GetSiteFeed()
 
-    # attempts to authenticate a client with a saved token
-    # returns true if authentication was ok
     def auth_client_with_token(self):
+        """Attempts to authenticate a client with a saved token
+        returns true if authentication was ok"""
         try:
             fh = open(self.TOKEN_FILE, "r")
             token = fh.read()
@@ -85,32 +85,33 @@ class SitesCommunicator(object):
             except gdata.client.CaptchaChallenge as challenge:
                 self.handle_captcha_challenge(challenge)
 
-    # gets the name of the meeting minute for this date
     def meeting_minute_name(self):
+        """Gets the name of the meeting minute for this date"""
         return "Minutes for {0}".format(
             datetime.datetime.now().strftime("%b %d, %Y"))
 
-    # gets the url that will be generated for today's meeting minute name
-    # note that it only returns the last part of the URL
     def meeting_minute_url( self ):
+        """Gets the url that will be generated for today's meeting minute name
+        note that it only returns the last part of the URL"""
         return "minutes-for-{0}".format(
             datetime.datetime.now().strftime( "%b-%d-%Y" ).lower())
 
-    # Amazingly, this is non-trivial to do.  The API claims there is a way to
-    # directly pass a URL, but I gave up on this after trying around 200 combinations
-    # of what it could possibly be.
-    #
-    # Note that the URL is relative to the base site.  I.e. to get:
-    # https://sites.google.com/site/mysite/mydirectory/meeting-minutes,
-    # specify: "/mydirectory/meeting-minutes
     def content_entry_for_url(self, relative):
+        """Amazingly, this is non-trivial to do.  The API claims there is a way to
+        directly pass a URL, but I gave up on this after trying around 200 combinations
+        of what it could possibly be.
+        
+        Note that the URL is relative to the base site.  I.e. to get:
+        https://sites.google.com/site/mysite/mydirectory/meeting-minutes,
+        specify: "/mydirectory/meeting-minutes"""
+
         absolute = "{0}?path={1}".format(
             self.client.MakeContentFeedUri(), relative)
         return self.client.GetContentFeed(uri=absolute).entry
 
-    # takes the HTML content
-    # assumes that the page doesn't already exist
     def make_meeting_minute_blindly(self, content):
+        """Takes the HTML content
+        assumes that the page doesn't already exist"""
         parent = self.content_entry_for_url(self.MEETING_MINUTES)[0]
         self.client.CreatePage(
             'webpage',
@@ -118,9 +119,9 @@ class SitesCommunicator(object):
             html=content,
             parent=parent)
 
-    # returns the meeting minute page for today, or None if one doesn't
-    # already exist
     def get_meeting_minute_page(self):
+        """Returns the meeting minute page for today, 
+        or None if one doesn't already exist"""
         content = self.content_entry_for_url("{0}/{1}".format(
                 self.MEETING_MINUTES,
                 self.meeting_minute_url()))
@@ -161,9 +162,9 @@ class SitesCommunicator(object):
             self.make_meeting_minute_blindly(content)
 
 
-# given a filename, returns the raw file data
-# in a single string
 def read_raw_file(filename):
+    """Given a filename, returns the raw file data
+    in a single string"""
     fh = open(filename, "r")
     content = fh.read()
     fh.close()
@@ -173,9 +174,9 @@ def file_extension(filename):
     _, extension = os.path.splitext(filename)
     return extension
 
-# reads in the given file, making sure it's in HTML format
-# assumes that html files end in .html
 def read_formatted(filename):
+    """Reads in the given file, making sure it's in HTML format
+    assumes that html files end in .html"""
     extension = file_extension(filename)
     if extension in file_extension_parsers:
         contents = read_raw_file(filename).split("\n")
