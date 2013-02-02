@@ -23,208 +23,218 @@ import string
 import sys
 import re
 
-class ParseResult( object ):
-    def __init__( self, parsed, remaining ):
+class ParseResult(object):
+    def __init__(self, parsed, remaining):
         self.parsed = parsed
         self.remaining = remaining
 
-    def __eq__( self, other ):
-        return self.parsed == other.parsed and \
-            self.remaining == other.remaining
+    def __eq__(self, other):
+        return (self.parsed == other.parsed and 
+                self.remaining == other.remaining)
 
 # given two strings, it will concatenate them so there is exactly
 # one space in between them
-def concatWithSpace( str1, str2 ):
-    return str1.rstrip() + " " + str2.lstrip()
+def concat_with_space(str1, str2):
+    return "{0} {1}".format(str1.rstrip(),
+                            str2.lstrip())
 
 # gets the number of whitespace characters before the line begins
-def numLeadingWhitespace( line ):
-    return len( line ) - len( line.lstrip() )
+def num_leading_whitespace(line):
+    return len(line) - len(line.lstrip())
 
 # determines if a line contains more uppercase letters
 # than lowercase letters
-def moreCaps( line ):
-    uppers = [ c for c in line if c.isupper() ]
-    lowers = [ c for c in line if c.islower() ]
-    return len( uppers ) > len( lowers )
+def more_caps(line):
+    uppers = [c for c in line if c.isupper()]
+    lowers = [c for c in line if c.islower()]
+    return len(uppers) > len(lowers)
 
 # chomps the given string off of the end of the given string, if
 # the string is long enough and the character is there
 # otherwise is doesn't touch the string
-def chompString( string, postfix ):
-    if string.endswith( postfix ):
-        string = string[ : len( string ) - len( postfix ) ]
+def chomp_string(string, postfix):
+    if string.endswith(postfix):
+        up_to_postfix = len(string) - len(postfix)
+        string = string[:up_to_postfix]
     return string
 
-class Parser( object ):
+class Parser(object):
     __metaclass__ = ABCMeta
 
     # returns a ParseResult
     @abstractmethod
-    def parse( self, lines ):
+    def parse(self, lines):
         pass
 
-def andParsers( *parsers ):
-    if isinstance( parsers[ 0 ], tuple ):
-        parsers = parsers[ 0 ]
+def and_parsers(*parsers):
+    if isinstance(parsers[0], tuple):
+        parsers = parsers[0]
 
-    if len( parsers ) < 2:
-        raise Exception( "Not enough arguments to andParsers" )
-    elif len( parsers ) == 2:
-        return AndParser( parsers[ 0 ], 
-                          parsers[ 1 ] )
+    if len(parsers) < 2:
+        raise Exception("Not enough arguments to and_parsers")
+    elif len(parsers) == 2:
+        return AndParser(parsers[0],
+                         parsers[1])
     else:
-        return AndParser( parsers[ 0 ],
-                          andParsers( parsers[ 1: ] ) )
+        return AndParser(parsers[0],
+                         and_parsers(parsers[1:]))
 
-class AndParser( Parser ):
-    def __init__( self, p1, p2 ):
-        super( AndParser, self ).__init__()
+class AndParser(Parser):
+    def __init__(self, p1, p2):
+        super(AndParser, self).__init__()
         self.p1 = p1
         self.p2 = p2
 
-    def parse( self, lines ):
-        p1Res = self.p1.parse( lines )
-        p2Res = self.p2.parse( p1Res.remaining )
-        return ParseResult( p1Res.parsed + p2Res.parsed,
-                            p2Res.remaining )
+    def parse(self, lines):
+        p1Res = self.p1.parse(lines)
+        p2Res = self.p2.parse(p1Res.remaining)
+        return ParseResult(p1Res.parsed + p2Res.parsed,
+                           p2Res.remaining)
 
-class HeaderParser( Parser ):
+class HeaderParser(Parser):
     REGEX_STRING = "^[^\-.]+"
-    REGEX = re.compile( REGEX_STRING )
+    REGEX = re.compile(REGEX_STRING)
 
-    def __init__( self ):
-        super( HeaderParser, self ).__init__()
+    def __init__(self):
+        super(HeaderParser, self).__init__()
 
     # headers start at the beginning of a line, and are mostly uppercase
-    def isHeader( self, line ):
-        return self.REGEX.match( line ) and \
-            moreCaps( line )
+    def is_header(self, line):
+        return (self.REGEX.match(line) and 
+                more_caps(line))
 
-    def formatHeader( self, line ):
-        return string.capwords( chompString( line, ":" ) )
+    @staticmethod
+    def format_header(line):
+        return string.capwords(chomp_string(line, ":"))
 
-    def toHeader( self, line ):
-        return "<h3>%s</h3>\n" % escape( self.formatHeader( line ) )
+    @staticmethod
+    def to_header(line):
+        return "<h3>{0}</h3>\n".format(
+            escape(HeaderParser.format_header(line)))
 
-    def parse( self, lines ):
-        if len( lines ) > 0 and self.isHeader( lines[ 0 ] ):
-            return ParseResult( self.toHeader( lines[ 0 ] ),
-                                lines[ 1: ] )
+    def parse(self, lines):
+        if len(lines) > 0 and self.is_header(lines[0]):
+            return ParseResult(self.to_header(lines[0]),
+                               lines[1:])
         else:
-            return ParseResult( "", lines )
+            return ParseResult("", lines)
 
-class ListHeaderParser( Parser ):
+class ListHeaderParser(Parser):
     REGEX_STRING = "^(\s*)-"
-    REGEX = re.compile( REGEX_STRING )
-    def __init__( self ):
-        super( ListHeaderParser, self ).__init__()
+    REGEX = re.compile(REGEX_STRING)
 
-    def parse( self, lines ):
-        if len( lines ) == 0:
-            return ParseResult( "", [] )
+    def __init__(self):
+        super(ListHeaderParser, self).__init__()
+
+    def parse(self, lines):
+        if len(lines) == 0:
+            return ParseResult("", [])
         else:
             parsed = ""
             remaining = lines
-            match = self.REGEX.match( lines[ 0 ] )
+            match = self.REGEX.match(lines[0])
             if match:
-                leadingSize = len( match.groups()[ 0 ] )
+                leadingSize = len(match.groups()[0])
                 parsed = "<ul>\n"
-                inner = ListParser( leadingSize ).parse( lines )
+                inner = ListParser(leadingSize).parse(lines)
                 parsed += inner.parsed + "</ul>\n"
                 remaining = inner.remaining
-            return ParseResult( parsed, remaining )
+            return ParseResult(parsed, remaining)
+            
+            
+class ListElementParser(Parser):
+    REGEX_STRING_NEXT_LINES_CONTENT = '^([^-].+)'
+    REGEX_NEXT_LINES_CONTENT = \
+        re.compile(REGEX_STRING_NEXT_LINES_CONTENT)
 
-class ListElementParser( Parser ):
     # numIn is the number of whitespace we are in
-    def __init__( self, numIn = 0 ):
-        super( ListElementParser, self ).__init__()
-        self.numIn = numIn
-        self.regexStringFirstLine = '^\s{%s}-(.*)' % (numIn)
-        self.regexFirstLine = re.compile( self.regexStringFirstLine )
-        self.regexStringNextLinesWhitespace = '^\s{%s,}' % (numIn)
-        self.regexNextLinesWhitespace = \
-            re.compile( self.regexStringNextLinesWhitespace )
-        self.regexStringNextLinesContent = '^([^-].+)'
-        self.regexNextLinesContent = \
-            re.compile( self.regexStringNextLinesContent )
+    def __init__(self, num_in=0):
+        super(ListElementParser, self).__init__()
+        self.num_in = num_in
+        regex_string_first_line = '^\s{{{0}}}-(.*)'.format(num_in)
+        self.regex_first_line = re.compile(regex_string_first_line)
+        regex_string_next_lines_whitespace = '^\s{{{0},}}'.format(num_in)
+        self.regex_next_lines_whitespace = \
+            re.compile(regex_string_next_lines_whitespace)
 
-    def firstLineText( self, line ):
-        return self.regexFirstLine.match( line ).groups()[ 0 ]
+    def first_line_text(self, line):
+        return self.regex_first_line.match(line).groups()[0]
 
     # returns the text of the next lines, or None if it's not a valid
     # portion of a list element
-    def restLinesText( self, line ):
+    def rest_lines_text(self, line):
         # note that python lacks an atomic grouping operator or a possessive
         # quantifier, so a regex like:
         # ^\s{%s,}([^-].+) is insufficient in and of itself.  it will backtrack
         # itself into accepting.
-        if self.regexNextLinesWhitespace.match( line ):
-            match = self.regexNextLinesContent.match( line.lstrip() )
+        if self.regex_next_lines_whitespace.match(line):
+            match = self.REGEX_NEXT_LINES_CONTENT.match(line.lstrip())
             if match:
-                return match.groups()[ 0 ]
+                return match.groups()[0]
         return None
         
     # assumes that it will be initially called on a list element
-    def parse( self, lines ):
-        parsed = self.firstLineText( lines[ 0 ] )
-        lines = lines[ 1: ]
+    def parse(self, lines):
+        parsed = self.first_line_text(lines[0])
+        lines = lines[1:]
         done = False
 
-        while len( lines ) > 0 and not done:
-            curLine = self.restLinesText( lines[ 0 ] )
-            if curLine:
-                parsed = concatWithSpace( parsed, curLine )
-                lines = lines[ 1: ]
+        while len(lines) > 0 and not done:
+            cur_line = self.rest_lines_text(lines[0])
+            if cur_line:
+                parsed = concat_with_space(parsed, cur_line)
+                lines = lines[1:]
             else:
                 done = True
 
-        return ParseResult( parsed, lines )
+        return ParseResult(parsed, lines)
 
-class ListGroupParser( Parser ):
+
+class ListGroupParser(Parser):
     # numIn is the number of whitespace we are in
     # assumes that the list tag has already been started
-    def __init__( self, numIn = 0 ):
-        super( ListGroupParser, self ).__init__()
-        self.numIn = numIn
-        self.regexString = '(^\s{%s})-.*' % (numIn)
-        self.regex = re.compile( self.regexString )
+    def __init__(self, num_in=0):
+        super(ListGroupParser, self).__init__()
+        self.num_in = num_in
+        regex_string = '(^\s{{{0}}})-.*'.format(num_in)
+        self.regex = re.compile(regex_string)
 
-    def parse( self, lines ):
+    def parse(self, lines):
         parsed = ""
         done = False
         while lines and not done:
-            match = self.regex.match( lines[ 0 ] )
+            match = self.regex.match(lines[0])
             if match:
-                element = ListElementParser( self.numIn ).parse( lines )
-                parsed += "<li>%s</li>\n" % element.parsed
+                element = ListElementParser(self.num_in).parse(lines)
+                parsed += "<li>{0}</li>\n".format(element.parsed)
                 lines = element.remaining
             else:
                 done = True
 
-        return ParseResult( parsed, lines )
+        return ParseResult(parsed, lines)
 
-class ListParser( Parser ):
+class ListParser(Parser):
+    REGEX_STRING = '(^\s*)-.*'
+    REGEX = re.compile(REGEX_STRING)
+
     # numIn is the number of whitespace we are in
     # assumes that the list tag has already been started
-    def __init__( self, numIn = 0 ):
-        super( ListParser, self ).__init__()
-        self.numIn = numIn
-        self.regexString = '(^\s*)-.*'
-        self.regex = re.compile( self.regexString )
+    def __init__(self, num_in=0):
+        super(ListParser, self).__init__()
+        self.num_in = num_in
 
-    def parse( self, lines ):
+    def parse(self, lines):
         parsed = ""
         done = False
         while lines and not done:
-            match = self.regex.match( lines[ 0 ] )
+            match = self.REGEX.match(lines[0])
             if match:
                 res = None
-                numWhitespace = len( match.groups()[ 0 ] )
-                if numWhitespace == self.numIn:
-                    res = ListGroupParser( self.numIn ).parse( lines )
-                elif numWhitespace > self.numIn:
-                    res = ListHeaderParser().parse( lines )
+                num_whitespace = len(match.groups()[0])
+                if num_whitespace == self.num_in:
+                    res = ListGroupParser(self.num_in).parse(lines)
+                elif num_whitespace > self.num_in:
+                    res = ListHeaderParser().parse(lines)
                 else: # leading < self.numIn
                     done = True
                 
@@ -234,44 +244,44 @@ class ListParser( Parser ):
             else:
                 done = True # if we didn't match
 
-        return ParseResult( parsed, lines )
+        return ParseResult(parsed, lines)
                     
-class BreakParser( Parser ):
+class BreakParser(Parser):
     REGEX_STRING = "^\s*$"
-    REGEX = re.compile( REGEX_STRING )
+    REGEX = re.compile(REGEX_STRING)
 
-    def __init__( self ):
-        super( BreakParser, self ).__init__()
+    def __init__(self):
+        super(BreakParser, self).__init__()
 
-    def parse( self, lines ):
-        if lines and self.REGEX.match( lines[ 0 ] ):
-            return ParseResult( "<br/>\n", lines[ 1: ] )
+    def parse(self, lines):
+        if lines and self.REGEX.match(lines[0]):
+            return ParseResult("<br/>\n", lines[1:])
         else:
-            return ParseResult( "", lines )
+            return ParseResult("", lines)
 
-class NotesParser( Parser ):
-    COMPOSITE_PARSER = andParsers( HeaderParser(),
+class NotesParser(Parser):
+    COMPOSITE_PARSER = and_parsers(HeaderParser(),
                                    ListHeaderParser(),
-                                   BreakParser() )
+                                   BreakParser())
     def __init__( self ):
-        super( NotesParser, self ).__init__()
+        super(NotesParser, self).__init__()
 
-    def parse( self, lines ):
+    def parse(self, lines):
         parsed = ""
-        openFreeText = False
+        open_free_text = False
 
-        while len( lines ) > 0:
-            res = self.COMPOSITE_PARSER.parse( lines )
+        while len(lines) > 0:
+            res = self.COMPOSITE_PARSER.parse(lines)
             if res.parsed == "": # we got nowhere - free text
-                assert( res.remaining == lines )
-                if openFreeText: # already in open text
-                    parsed += escape( lines[ 0 ] )
+                assert(res.remaining == lines)
+                if open_free_text: # already in open text
+                    parsed += escape(lines[0])
                 else: # not already in open text
-                    openFreeText = True
-                    parsed += "<p>%s " % escape( lines[ 0 ] )
+                    open_free_text = True
+                    parsed += "<p>{0} ".format(escape(lines[0]))
                 lines = lines[ 1: ]
-            elif openFreeText: # we got past the free text
-                openFreeText = False
+            elif open_free_text: # we got past the free text
+                open_free_text = False
                 parsed += "</p>\n" + res.parsed
                 lines = res.remaining
             else: # parse not involving free text
@@ -279,35 +289,39 @@ class NotesParser( Parser ):
                 lines = res.remaining
 
         # if we ended with free text, then we still need to close it
-        if openFreeText:
+        if open_free_text:
             parsed += "</p>\n"
-            openFreeText = False
+            open_free_text = False
 
-        return ParseResult( parsed, [] )
+        return ParseResult(parsed, [])
 
-def toLines( string ):
-    return string.split( "\n" )
+def to_lines(string):
+    return string.split("\n")
 
-class Notes2HTML( object ):
-    def chomp( self, line ):
-        if len( line ) > 0 and line[ len( line ) - 1 ] == "\n":
-            line = line[ : -1 ]
-        return line
+class Notes2HTML(object):
+    HTML_HEADER = \
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">"
 
-    def readLines( self, filename ):
-        fh = open( filename, "r" )
-        lines = fh.read()
-        fh.close()
-        return toLines( lines )
-    
-    def convertContents( self, contents ):
-        return "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">" + NotesParser().parse( contents ).parsed + "</html>\n"
+    @staticmethod
+    def chomp(line):
+        return chomp_string(line, "\n")
 
-    def convertFile( self, filename ):
-        return self.convertContents( self.readLines( filename ) )
+    @staticmethod
+    def read_lines(filename):
+        with open(filename, "r") as fh:
+            return to_lines(fh.read())
+
+    def convert_contents(self, contents):
+        return "{0}{1}</html>\n".format(
+            self.HTML_HEADER,
+            NotesParser().parse(contents).parsed)
+
+    def convert_file(self, filename):
+        return self.convert_contents(
+            self.read_lines(filename))
 
 if __name__ == "__main__":
-    if len( sys.argv ) == 2:
-        print Notes2HTML().convertFile( sys.argv[ 1 ] )
+    if len(sys.argv) == 2:
+        print Notes2HTML().convert_file(sys.argv[1])
     else:
         print "Needs an input text file."
